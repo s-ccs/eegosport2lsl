@@ -544,8 +544,10 @@ ImpedanceCheck_test::ImpedanceCheck_test(QWidget *parent)
 
 				amplifierStream = amp->OpenImpedanceStream(ref_bitmask);
                 qDebug() << "openedImpedanceStream" << endl;
+                usleep(1000000); // wait 1s
 
 				doShowImpedances = true;
+
 				showImpedancesInGUI();
 			}
 
@@ -569,7 +571,7 @@ ImpedanceCheck_test::ImpedanceCheck_test(QWidget *parent)
                 amplifierStream = amp->OpenEegStream(samplingRate);//, 0.75, 4.0, full_bitmask, full_bitmask);
                 //amplifierStream = amp->OpenEegStream(this->samplingRate, 0.75, 4.0, empty_bitmask, full_bitmask); //# XXX BIP only VERSION
 
-                usleep(3000000);
+                usleep(1000000); // wait for 1s
                 qDebug() << "OpenEEGStream successful"<< endl;
 
                 amplifierStream->getData();
@@ -639,6 +641,7 @@ ImpedanceCheck_test::~ImpedanceCheck_test()
 
 void ImpedanceCheck_test::streamEEGToLSL()
 {
+    buffer buf;
 
 	qDebug() << "passed srate" << this->samplingRate << endl;
 	qDebug() << "bip_bimask " << QString::number(this->bip_bitmask, 16) << endl;
@@ -725,12 +728,12 @@ void ImpedanceCheck_test::streamEEGToLSL()
 	errorBox.setText("Amp is now streaming EEG data of " + QString::number(nChannels) + " channels to LSL with " + QString::number(this->samplingRate) + "Hz");
 	errorBox.exec();
 
-	buffer buffer = amplifierStream->getData(); // get 
+    buf = amplifierStream->getData(); // get
 
-	int channelCount = buffer.getChannelCount();
+    int channelCount = buf.getChannelCount();
 	//qDebug() << "chancount = " << channelCount << endl;
 
-	int sampleCount = buffer.size() / channelCount;
+    int sampleCount = buf.size() / channelCount;
 
 
 	std::vector<std::vector<float>> send_buffer(sampleCount, std::vector<float>(nChannels + 1));
@@ -740,9 +743,9 @@ void ImpedanceCheck_test::streamEEGToLSL()
 		qApp->processEvents(QEventLoop::AllEvents);
 
 		try {
-			buffer = amplifierStream->getData();
-            if (buffer.size()==0){
-                buffer = amplifierStream->getData();
+            buf = amplifierStream->getData();
+            if (buf.size()==0){
+                buf = amplifierStream->getData();
             }
 		}
 		catch (const eemagine::sdk::exceptions::incorrectValue& e) {
@@ -753,16 +756,16 @@ void ImpedanceCheck_test::streamEEGToLSL()
             //exception_string = exception_string + "@" + boost::lexical_cast<std::string>(send_buffer[sampleCount][nChannels]);
 			// very complex way to write -1@-1, we tried "-1@-1" before and it didnt work, C++ noobies here
             //marker_outlet.push_sample(&exception_string, lsl::local_clock());
-            buffer = amplifierStream->getData(); // get the buffer again, sometimes it is empty ...?
+            buf = amplifierStream->getData(); // get the buffer again, sometimes it is empty ...?
 
 			continue;
 		}
 		
 		double now = lsl::local_clock();
 
-		channelCount = buffer.getChannelCount();
+        channelCount = buf.getChannelCount();
 
-		sampleCount = buffer.size() / channelCount;
+        sampleCount = buf.size() / channelCount;
 
 
         //qDebug() << "samplecount: " << sampleCount << "chancount: " <<channelCount << endl;
@@ -770,11 +773,11 @@ void ImpedanceCheck_test::streamEEGToLSL()
 		std::vector<std::vector<float>> send_buffer(sampleCount, std::vector<float>(nChannels+1));
 		for (int s = 0; s < sampleCount; s++) {
 			for (int c = 0; c < nChannels; c++) {
-				send_buffer[s][c] = microvoltUnit * buffer.getSample(c, s);
+                send_buffer[s][c] = microvoltUnit * buf.getSample(c, s);
 			}
 
 				// add sample counter
-			send_buffer[s][nChannels] = buffer.getSample(channelCount-1, s); //last channel is the sample number
+            send_buffer[s][nChannels] = buf.getSample(channelCount-1, s); //last channel is the sample number
 			
 		}
 		data_outlet.push_chunk(send_buffer, now);
@@ -782,7 +785,7 @@ void ImpedanceCheck_test::streamEEGToLSL()
 		int last_mrk = 0;
 		for (int s = 0; s < sampleCount; s++) {
 			//if (int mrk = src_buffer[channelCount + s*(channelCount + 1)]) {
-			int mrk = buffer.getSample(channelCount-2, s);
+            int mrk = buf.getSample(channelCount-2, s);
 			//qDebug() << "Mrk" << mrk << " "<< last_mrk << endl;
 
 			if (mrk != last_mrk) { // send trigger only if we have one sample difference
@@ -808,8 +811,6 @@ void ImpedanceCheck_test::streamEEGToLSL()
 
 void ImpedanceCheck_test::showImpedancesInGUI()
 {
-
-	int counter = 0;
 	QString tmp;
 	QString value;
 	QString chType;
@@ -822,7 +823,7 @@ void ImpedanceCheck_test::showImpedancesInGUI()
     std::vector<channel> eegChannelList = amplifierStream->getChannelList();
 
     // initialize LSL stream for Impedances
-    lsl::stream_info data_info("ImpedanceStream " + amp->getType(), "EEG", nChannels + 1, this->samplingRate, lsl::cf_float32, "eegoSportsImpedance_" + amp->getType());
+    lsl::stream_info data_info("ImpedanceStream " + amp->getType(), "EEG", nChannels + 1, this->5, lsl::cf_float32, "eegoSportsImpedance_" + amp->getType());
 
     lsl::xml_element channels = data_info.desc().append_child("channels");
     QString label;
@@ -884,158 +885,137 @@ void ImpedanceCheck_test::showImpedancesInGUI()
     while (doShowImpedances == true)
 	{
 
-        usleep(1000);
-
+        usleep(100000); // 100ms wait
 		qApp->processEvents(QEventLoop::AllEvents);
 
-		counter++;
-
-		// only update the gui once in a while, to save power and since the sampling rate of impedances is low anyways
-		if (counter > 250) {
-
-			counter = 0;
 
 //qDebug() << "loop: getData" << endl;
 
 
-            try{
-			buf = amplifierStream->getData();
+        try{
+        buf = amplifierStream->getData();
 }	catch (eemagine::sdk::exceptions::internalError)
 {
- qDebug() << "failed to getData() - caught an internalError (2024-07: used to return what() 'no data'" << endl;
+qDebug() << "failed to getData() - caught an internalError (2024-07: used to return what() 'no data'" << endl;
+            continue;
+        }
+        // this showed that the last two channels are type 5 and 6 which is ref and gnd
+
+        std::vector<channel> ampChanlist = amplifierStream->getChannelList();
+
+
+        impedanceData = buf.data();
+
+        int channelCount = buf.getChannelCount();
+        int sampleCount = buf.size() / channelCount;
+
+        double now = lsl::local_clock();
+
+        //qDebug() << "imp-loop: samplecount: " << sampleCount << "chancount: " <<channelCount << endl;
+        if (sampleCount == 0) {
+            qDebug() << "no new sample, continue with loop" << endl;
+
+            continue;
+        }
+
+        std::vector<std::vector<float>> send_buf(sampleCount, std::vector<float>(nChannels+1));
+        for (int s = 0; s < sampleCount; s++) {
+            for (int c = 0; c < nChannels; c++) {
+                send_buf[s][c] = buf.getSample(c, s);
+            }
+            send_buf[s][nChannels] = buf.getSample(channelCount-1, s); //last channel is the sample number
+        }
+        data_outlet.push_chunk(send_buf, now);
+
+        //statusBar->addWidget(channelCountInfo);
+        int chanOfInfo = -1;
+        for (int chanOfList = 0; chanOfList < ampChanlist.size(); chanOfList++)
+        //for (int chanOfList = 0; chanOfList < nChannels; chanOfList++) // BIP ONLY
+
+        {
+            //qDebug() << "imp-loop: chanOfList"<<chanOfList << endl;
+
+            // ignore chantypes that are not 1 (regular ref channel), 2 (bipolar channels), 5 (ref) or 6(gnd)
+            int chanTypeInt = (int)ampChanlist[chanOfList].getType();
+            // BUG DUE TO BUGGED SDK: PUT CHANTYPE 2 IN!!!
+            //if (!(chanTypeInt == 1 || chanTypeInt == 2 || chanTypeInt == 5 || chanTypeInt == 6)) {
+            if (!(chanTypeInt == 1 || chanTypeInt == 5 || chanTypeInt == 6)) {
+                //qDebug() << "cont" << endl;
                 continue;
             }
-			// this showed that the last two channels are type 5 and 6 which is ref and gnd
-			
-			std::vector<channel> ampChanlist = amplifierStream->getChannelList();
-			
-            //for (int i = 0; i < ampChanlist.size(); i++) {
-            //	qDebug() << i << " type: " << ampChanlist[i].getType() << endl;
-            //}
+            chanOfInfo++;
+            //qDebug() << "impedances " << chanTypeInt << endl;
 
 
-            //qDebug() << "loop: access buf.data" << endl;
+            kOhm = (int)(impedanceData[chanOfList] / 1000.00f);
 
-			impedanceData = buf.data();
-
-
-            int channelCount = buf.getChannelCount();
-            int sampleCount = buf.size() / channelCount;
-
-            double now = lsl::local_clock();
-
-            channelCount = buf.getChannelCount();
-            //qDebug() << "chancount = " << channelCount << endl;
-
-            sampleCount = buf.size() / channelCount;
+            chanNumber = QString("%1").arg(chanOfInfo+1);
+            tmp = info.at(chanOfInfo).at(0);
+            value = QString("%1").arg(kOhm);
+            chType = QString("%1").arg((int)ampChanlist[chanOfList].getType());
+            //labels[chanOfInfo]->setText(chanNumber + ": " + tmp + "<br>" + value + kiloOhm + "<br>" + chType);
+            labels[chanOfInfo]->setText(chanNumber + ":<br>" + tmp + "<br>" + value + kiloOhm);
 
 
-            qDebug() << "imp-loop: samplecount: " << sampleCount << "chancount: " <<channelCount << endl;
-            if (sampleCount == 0) {
-                continue;
+            greenbound = (greenbound_spinbox->value() * kilo);
+            yellowbound = (yellowbound_spinbox->value()* kilo);
+            orangebound = (orangebound_spinbox->value() * kilo);
+
+            //coloring labels according to Impedance value in Ohm
+            if (impedanceData[chanOfList] > orangebound)//too high, red
+            {
+                labels[chanOfInfo]->setStyleSheet("QLabel { background-color : tomato; color : black; }");
             }
-
-            std::vector<std::vector<float>> send_buf(sampleCount, std::vector<float>(nChannels+1));
-            for (int s = 0; s < sampleCount; s++) {
-                for (int c = 0; c < nChannels; c++) {
-                    send_buf[s][c] = buf.getSample(c, s);
-                }
-                send_buf[s][nChannels] = buf.getSample(channelCount-1, s); //last channel is the sample number
+            else if (impedanceData[chanOfList] <= orangebound && impedanceData[chanOfList] > yellowbound)//high, orange
+            {
+                labels[chanOfInfo]->setStyleSheet("QLabel { background-color : orange; color : black; }");
             }
-            data_outlet.push_chunk(send_buf, now);
+            else if (impedanceData[chanOfList] <= yellowbound && impedanceData[chanOfList] > greenbound)//okay, yellow
+            {
+                labels[chanOfInfo]->setStyleSheet("QLabel { background-color : gold; color : black; }");
+            }
+            else if (impedanceData[chanOfList] <= (greenbound))// good, green
+            {
+                labels[chanOfInfo]->setStyleSheet("QLabel { background-color : yellowgreen; color : black; }");
+            }
+        }
 
-            //qDebug() << "imp-loop: display" << endl;
+        if (saveImpedancesFlag == true)
+        {
 
-			//statusBar->addWidget(channelCountInfo);
-			int chanOfInfo = -1;
-            for (int chanOfList = 0; chanOfList < ampChanlist.size(); chanOfList++)
-            //for (int chanOfList = 0; chanOfList < nChannels; chanOfList++) // BIP ONLY
+            QString impedancesFileName = QFileDialog::getSaveFileName(this, "save impedances");
+            if (impedancesFileName.isEmpty()) {//backup
+                impedancesFileName = QDate::currentDate().toString("'impedances_'MM_dd_yyyy'.txt'");
+            }
+            QFile impFile(impedancesFileName);
 
-			{
-                //qDebug() << "imp-loop: chanOfList"<<chanOfList << endl;
+            impFile.open(QIODevice::WriteOnly | QIODevice::Text);
+            /*if (!impFile.open(QFile::WriteOnly | QFile::Text))
+            {
+            QMessageBox::warning(this, "LSL ANT APP Save Impedances", QString("cannot write file %1:\n%2").arg(QDir::toNativeSeparators(impedancesFileName), impFile.errorString()));
+            }
+            else {*/
 
-				// ignore chantypes that are not 1 (regular ref channel), 2 (bipolar channels), 5 (ref) or 6(gnd)
-				int chanTypeInt = (int)ampChanlist[chanOfList].getType();
-				// BUG DUE TO BUGGED SDK: PUT CHANTYPE 2 IN!!!
-				//if (!(chanTypeInt == 1 || chanTypeInt == 2 || chanTypeInt == 5 || chanTypeInt == 6)) {
-				if (!(chanTypeInt == 1 || chanTypeInt == 5 || chanTypeInt == 6)) {
-					qDebug() << "cont" << endl;
-					continue;
-				}
-				chanOfInfo++;
-                //qDebug() << "impedances " << chanTypeInt << endl;
+            QTextStream impedances(&impFile);
+            QString label;
+            for (int i = 0; i < info.size(); i++)
+            {
+                label = info.at(i).at(0);
+                label.chop(1);
+                //label // impedance
+                impedances << label << "\t" << impedanceData[i] << endl;
 
-//qDebug() << "impedanceDataSize " << his->impedanceData.size() << endl;
-
-				kOhm = (int)(impedanceData[chanOfList] / 1000.00f);
-
-				chanNumber = QString("%1").arg(chanOfInfo+1);
-				tmp = info.at(chanOfInfo).at(0);
-				value = QString("%1").arg(kOhm);
-				chType = QString("%1").arg((int)ampChanlist[chanOfList].getType());
-				//labels[chanOfInfo]->setText(chanNumber + ": " + tmp + "<br>" + value + kiloOhm + "<br>" + chType);
-				labels[chanOfInfo]->setText(chanNumber + ":<br>" + tmp + "<br>" + value + kiloOhm);
-
-
-				greenbound = (greenbound_spinbox->value() * kilo);
-				yellowbound = (yellowbound_spinbox->value()* kilo);
-				orangebound = (orangebound_spinbox->value() * kilo);
-
-				//coloring labels according to Impedance value in Ohm
-				if (impedanceData[chanOfList] > orangebound)//too high, red
-				{
-					labels[chanOfInfo]->setStyleSheet("QLabel { background-color : tomato; color : black; }");
-				}
-				else if (impedanceData[chanOfList] <= orangebound && impedanceData[chanOfList] > yellowbound)//high, orange
-				{
-					labels[chanOfInfo]->setStyleSheet("QLabel { background-color : orange; color : black; }");
-				}
-				else if (impedanceData[chanOfList] <= yellowbound && impedanceData[chanOfList] > greenbound)//okay, yellow
-				{
-					labels[chanOfInfo]->setStyleSheet("QLabel { background-color : gold; color : black; }");
-				}
-				else if (impedanceData[chanOfList] <= (greenbound))// good, green
-				{
-					labels[chanOfInfo]->setStyleSheet("QLabel { background-color : yellowgreen; color : black; }");
-				}
-			}
-
-			if (saveImpedancesFlag == true)
-			{
-
-				QString impedancesFileName = QFileDialog::getSaveFileName(this, "save impedances");
-				if (impedancesFileName.isEmpty()) {//backup
-					impedancesFileName = QDate::currentDate().toString("'impedances_'MM_dd_yyyy'.txt'");
-				}
-				QFile impFile(impedancesFileName);
-
-				impFile.open(QIODevice::WriteOnly | QIODevice::Text);
-				/*if (!impFile.open(QFile::WriteOnly | QFile::Text))
-				{
-				QMessageBox::warning(this, "LSL ANT APP Save Impedances", QString("cannot write file %1:\n%2").arg(QDir::toNativeSeparators(impedancesFileName), impFile.errorString()));
-				}
-				else {*/
-
-				QTextStream impedances(&impFile);
-				QString label;
-				for (int i = 0; i < info.size(); i++)
-				{
-					label = info.at(i).at(0);
-					label.chop(1);
-					//label // impedance
-					impedances << label << "\t" << impedanceData[i] << endl;
-
-				}
-				impedances.flush();
-				impFile.close();
-				QMessageBox::information(this, "LSL ANT APP", QString("File %1 saved in path").arg(QDir::toNativeSeparators(impedancesFileName)));//.arg(QDir::absoluteFilePath));
-																																				  //}
+            }
+            impedances.flush();
+            impFile.close();
+            QMessageBox::information(this, "LSL ANT APP", QString("File %1 saved in path").arg(QDir::toNativeSeparators(impedancesFileName)));//.arg(QDir::absoluteFilePath));
+                                                                                                                                              //}
 
 
-				saveImpedancesFlag = false;
+            saveImpedancesFlag = false;
 
-			}
-		}
+        }
+
 
 		
 
