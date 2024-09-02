@@ -735,6 +735,7 @@ void ImpedanceCheck_test::streamEEGToLSL()
 
     int sampleCount = buf.size() / channelCount;
 
+    double firstSample_samplerCounter = buf.getSample(channelCount-1,0);
 
 	std::vector<std::vector<float>> send_buffer(sampleCount, std::vector<float>(nChannels + 1));
 	int prevError = 0;
@@ -777,7 +778,7 @@ void ImpedanceCheck_test::streamEEGToLSL()
 			}
 
 				// add sample counter
-            send_buffer[s][nChannels] = buf.getSample(channelCount-1, s); //last channel is the sample number
+            send_buffer[s][nChannels] = buf.getSample(channelCount-1, s) - firstSample_samplerCounter; //last channel is the sample number
 			
 		}
 		data_outlet.push_chunk(send_buffer, now);
@@ -823,7 +824,7 @@ void ImpedanceCheck_test::showImpedancesInGUI()
     std::vector<channel> eegChannelList = amplifierStream->getChannelList();
 
     // initialize LSL stream for Impedances
-    lsl::stream_info data_info("ImpedanceStream " + amp->getType(), "EEG", nChannels + 1, this->5, lsl::cf_float32, "eegoSportsImpedance_" + amp->getType());
+    lsl::stream_info data_info("ImpedanceStream " + amp->getType(), "EEG", nChannels + 1, 5, lsl::cf_float32, "eegoSportsImpedance_" + amp->getType());
 
     lsl::xml_element channels = data_info.desc().append_child("channels");
     QString label;
