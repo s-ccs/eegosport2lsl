@@ -544,7 +544,7 @@ ImpedanceCheck_test::ImpedanceCheck_test(QWidget *parent)
 
 				amplifierStream = amp->OpenImpedanceStream(ref_bitmask);
                 qDebug() << "openedImpedanceStream" << endl;
-                usleep(1000000); // wait 1s
+                usleep(500000); // wait 0.5s
 
 				doShowImpedances = true;
 
@@ -571,7 +571,7 @@ ImpedanceCheck_test::ImpedanceCheck_test(QWidget *parent)
                 amplifierStream = amp->OpenEegStream(samplingRate);//, 0.75, 4.0, full_bitmask, full_bitmask);
                 //amplifierStream = amp->OpenEegStream(this->samplingRate, 0.75, 4.0, empty_bitmask, full_bitmask); //# XXX BIP only VERSION
 
-                usleep(1000000); // wait for 1s
+                usleep(2000000); // wait for 2s
                 qDebug() << "OpenEEGStream successful"<< endl;
 
                 amplifierStream->getData();
@@ -584,7 +584,7 @@ ImpedanceCheck_test::ImpedanceCheck_test(QWidget *parent)
 				if (sampleCount == 0) {
 					QMessageBox errorBox;
 					errorBox.setWindowTitle("eego LSL app");
-					errorBox.setText("No samples in the data. Is the trigger plugged in for a cascaded amplifier?");
+                    errorBox.setText("No samples in the data. Is the trigger plugged in for a cascaded amplifier? If yes, sometimes retrying sending data helps.");
 					errorBox.exec();
 
 					delete amplifierStream;
@@ -653,28 +653,13 @@ void ImpedanceCheck_test::streamEEGToLSL()
 
 	qDebug() << "channelList (size): " << eegChannelList.size() << endl;
 
-    //for (int k = 0; k < eegChannelList.size(); k++)
-    //{
-    //qDebug() << "channel type: " << eegChannelList[k].getType() << endl;
-	/*
-	if (eegChannelList[k].getType() == 2)
-	{
-		QMessageBox errorBox;
-		errorBox.setWindowTitle("eego LSL app");
-		errorBox.setText("Seems you have not assigned the bipolar channels. They will be counted with channel index");
-		errorBox.exec();
-		break;
-	}
-	*/
-    //}
-	//channelCountInfo->setText("channel count: " + QString::number(eegChannelList.size()));
 	// create data streaminfo and append some meta-data
-	lsl::stream_info data_info("EEGstream " + amp->getType(), "EEG", nChannels + 1, this->samplingRate, lsl::cf_float32, "eegoSports_" + amp->getType());
+    lsl::stream_info data_info("eegosport", "EEG", nChannels + 1, this->samplingRate, lsl::cf_float32, "eegoSports_" + amp->getType());
 
 	lsl::xml_element channels = data_info.desc().append_child("channels");
 	QString label;
 
-	// only stream the amount of channels that are in the info file
+    // only stream the amount of channels that are in the info file
 	for (int k = 0; k < nChannels; k++) {
 
         //qDebug() << "channel " << eegChannelList[k].getIndex() << "type  " << eegChannelList[k].getType();// << endl;
@@ -717,7 +702,7 @@ void ImpedanceCheck_test::streamEEGToLSL()
 	lsl::stream_outlet data_outlet(data_info);
 
 	// create marker streaminfo and outlet
-	lsl::stream_info marker_info("eegoSports-" + amp->getType() + "_markers" + "Markers", "Markers", 1, 0, lsl::cf_string, "eegoSports_" + boost::lexical_cast<std::string>(amp->getType()) + "_markers");
+    lsl::stream_info marker_info("eegosport_markers", "Markers", 1, 0, lsl::cf_string, "eegoSports_" + boost::lexical_cast<std::string>(amp->getType()) + "_markers");
 	lsl::stream_outlet marker_outlet(marker_info);
 
 
@@ -740,7 +725,7 @@ void ImpedanceCheck_test::streamEEGToLSL()
 	std::vector<std::vector<float>> send_buffer(sampleCount, std::vector<float>(nChannels + 1));
 	int prevError = 0;
 	while (doStreamEEG == true) {
-        usleep(1000); // faster polling is not better
+        usleep(30000); // faster polling is not better
 		qApp->processEvents(QEventLoop::AllEvents);
 
 		try {
@@ -764,11 +749,7 @@ void ImpedanceCheck_test::streamEEGToLSL()
 		
 		double now = lsl::local_clock();
 
-        channelCount = buf.getChannelCount();
-
         sampleCount = buf.size() / channelCount;
-
-
         //qDebug() << "samplecount: " << sampleCount << "chancount: " <<channelCount << endl;
 
 		std::vector<std::vector<float>> send_buffer(sampleCount, std::vector<float>(nChannels+1));
@@ -818,6 +799,7 @@ void ImpedanceCheck_test::showImpedancesInGUI()
 	double* impedanceData;
 	buffer buf;
 	int kOhm;
+    int ohm;
 	QString chanNumber;
 
 
@@ -828,11 +810,12 @@ void ImpedanceCheck_test::showImpedancesInGUI()
 
     lsl::xml_element channels = data_info.desc().append_child("channels");
     QString label;
-
-    // only stream the amount of channels that are in the info file
+// channel 0 - 177, -2 => 176 channels => 88 per amp => 63 + 25 channel =>
     for (int k = 0; k < nChannels; k++) {
 
-        //qDebug() << "channel " << eegChannelList[k].getIndex() << "type  " << eegChannelList[k].getType();// << endl;
+
+
+        //qDebug() << "channel " << k << "index" << eegChannelList[k].getIndex() << "type  " << eegChannelList[k].getType();// << endl;
 
         // be sure that only normal referenced or bipolar channels are taken
         if (eegChannelList[k].getType() == 1) {
@@ -909,7 +892,7 @@ qDebug() << "failed to getData() - caught an internalError (2024-07: used to ret
 
         int channelCount = buf.getChannelCount();
         int sampleCount = buf.size() / channelCount;
-
+        int c_amp;
         double now = lsl::local_clock();
 
         //qDebug() << "imp-loop: samplecount: " << sampleCount << "chancount: " <<channelCount << endl;
@@ -922,34 +905,44 @@ qDebug() << "failed to getData() - caught an internalError (2024-07: used to ret
         std::vector<std::vector<float>> send_buf(sampleCount, std::vector<float>(nChannels+1));
         for (int s = 0; s < sampleCount; s++) {
             for (int c = 0; c < nChannels; c++) {
-                send_buf[s][c] = buf.getSample(c, s);
+                if (ampChanlist.size()>150 && c>=64){
+                    // due to a bug in the SDK, we have to jump by the 25 BIP channels
+                    c_amp = c + 24;
+                }
+                else {
+                    c_amp = c;
+                }
+                send_buf[s][c] = buf.getSample(c_amp, s);
             }
             send_buf[s][nChannels] = buf.getSample(channelCount-1, s); //last channel is the sample number
         }
         data_outlet.push_chunk(send_buf, now);
 
-        //statusBar->addWidget(channelCountInfo);
         int chanOfInfo = -1;
         for (int chanOfList = 0; chanOfList < ampChanlist.size(); chanOfList++)
-        //for (int chanOfList = 0; chanOfList < nChannels; chanOfList++) // BIP ONLY
-
         {
-            //qDebug() << "imp-loop: chanOfList"<<chanOfList << endl;
-
             // ignore chantypes that are not 1 (regular ref channel), 2 (bipolar channels), 5 (ref) or 6(gnd)
             int chanTypeInt = (int)ampChanlist[chanOfList].getType();
-            // BUG DUE TO BUGGED SDK: PUT CHANTYPE 2 IN!!!
             //if (!(chanTypeInt == 1 || chanTypeInt == 2 || chanTypeInt == 5 || chanTypeInt == 6)) {
             if (!(chanTypeInt == 1 || chanTypeInt == 5 || chanTypeInt == 6)) {
                 //qDebug() << "cont" << endl;
                 continue;
             }
             chanOfInfo++;
-            //qDebug() << "impedances " << chanTypeInt << endl;
+            if (ampChanlist.size()>150 && chanOfList>=64){
 
+            // due to a bug in the SDK, we have to jump by the 25 BIP channels
+                c_amp = chanOfList+ 24;
+            }
+            else {
+                c_amp = chanOfList;
+            }
 
-            kOhm = (int)(impedanceData[chanOfList] / 1000.00f);
-
+            kOhm = (int)(impedanceData[c_amp] / 1000.00f);
+            ohm = impedanceData[c_amp];
+            if (ohm<0){
+                ohm = 9999*kilo;
+            }
             chanNumber = QString("%1").arg(chanOfInfo+1);
             tmp = info.at(chanOfInfo).at(0);
             value = QString("%1").arg(kOhm);
@@ -963,22 +956,25 @@ qDebug() << "failed to getData() - caught an internalError (2024-07: used to ret
             orangebound = (orangebound_spinbox->value() * kilo);
 
             //coloring labels according to Impedance value in Ohm
-            if (impedanceData[chanOfList] > orangebound)//too high, red
+            if (ohm > orangebound)//too high, red
             {
                 labels[chanOfInfo]->setStyleSheet("QLabel { background-color : tomato; color : black; }");
             }
-            else if (impedanceData[chanOfList] <= orangebound && impedanceData[chanOfList] > yellowbound)//high, orange
+            else if (ohm <= orangebound && ohm> yellowbound)//high, orange
             {
                 labels[chanOfInfo]->setStyleSheet("QLabel { background-color : orange; color : black; }");
             }
-            else if (impedanceData[chanOfList] <= yellowbound && impedanceData[chanOfList] > greenbound)//okay, yellow
+            else if (ohm <= yellowbound && ohm > greenbound)//okay, yellow
             {
                 labels[chanOfInfo]->setStyleSheet("QLabel { background-color : gold; color : black; }");
             }
-            else if (impedanceData[chanOfList] <= (greenbound))// good, green
+            else if (ohm<= (greenbound))// good, green
             {
                 labels[chanOfInfo]->setStyleSheet("QLabel { background-color : yellowgreen; color : black; }");
             }
+            //qDebug() << "impedances " << chanOfList << " " << ohm << endl;
+
+
         }
 
         if (saveImpedancesFlag == true)
