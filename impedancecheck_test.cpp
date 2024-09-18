@@ -917,7 +917,7 @@ qDebug() << "failed to getData() - caught an internalError (2024-07: used to ret
             send_buf[s][nChannels] = buf.getSample(channelCount-1, s); //last channel is the sample number
         }
         data_outlet.push_chunk(send_buf, now);
-
+        //qDebug() << "chanlist" << ampChanlist.size() << endl;
         int chanOfInfo = -1;
         for (int chanOfList = 0; chanOfList < ampChanlist.size(); chanOfList++)
         {
@@ -929,21 +929,24 @@ qDebug() << "failed to getData() - caught an internalError (2024-07: used to ret
                 continue;
             }
             chanOfInfo++;
-            if (ampChanlist.size()>150 && chanOfList>=64){
+            if (ampChanlist.size()>150 && chanOfList>=64 && chanOfList<176){
 
             // due to a bug in the SDK, we have to jump by the 25 BIP channels
                 c_amp = chanOfList+ 24;
+
             }
             else {
                 c_amp = chanOfList;
             }
+
+            //qDebug() << "imp " << chanOfList << "c_amp" << chanTypeInt<<"-" << endl;
 
             kOhm = (int)(impedanceData[c_amp] / 1000.00f);
             ohm = impedanceData[c_amp];
             if (ohm<0){
                 ohm = 9999*kilo;
             }
-            chanNumber = QString("%1").arg(chanOfInfo+1);
+            chanNumber = QString("%1").arg(c_amp+1);
             tmp = info.at(chanOfInfo).at(0);
             value = QString("%1").arg(kOhm);
             chType = QString("%1").arg((int)ampChanlist[chanOfList].getType());
